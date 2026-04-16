@@ -10,20 +10,29 @@ Published topics
 
 Parameters
 ----------
-host (str, default 192.168.0.100)  — modem IP address
-port (int, default 9200)           — TCP port
+host     (str,  default 192.168.0.100)  — modem IP address
+port     (int,  default 9200)           — TCP port
+simulate (bool, default False)          — generate synthetic messages (no hardware needed)
 """
 
 import socket
 import threading
+import time
 
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
 
-# Unsolicited receive notification format:
-#   RECV,<length>,<from>,<to>,<proptime>,<relvel>,<rssi>,<integrity>,<payload>\r\n
 RECV_PREFIX = 'RECV,'
+
+# Simulated messages sent periodically
+_SIM_MESSAGES = [
+    'PING',
+    'STATUS:OK',
+    'DEPTH:42.3',
+    'HEADING:270.5',
+    'BATTERY:85',
+]
 
 
 class S2CRModemNode(Node):
@@ -31,16 +40,23 @@ class S2CRModemNode(Node):
     def __init__(self):
         super().__init__('s2cr_modem_node')
 
-        self.declare_parameter('host', '192.168.0.100')
-        self.declare_parameter('port', 9200)
+        self.declare_parameter('host',     '192.168.0.100')
+        self.declare_parameter('port',     9200)
+        self.declare_parameter('simulate', False)
 
         self.pub_message = self.create_publisher(String, '/s2cr/message', 10)
 
-        self._sock   = None
-        self._thread = None
+        self._sock    = None
         self._running = False
+        self._thread  = None
+        self._sim_idx = 0
 
-        self._connect()
+        if self.get_parameter('simulate').value:
+            self.get_logger().info('S2CR modem: simulation mode ON')
+            self._running = True
+            self.create_timer(5.0, self._sim_callback)
+        else:
+            self._connect()
 
     # ------------------------------------------------------------------
     def _connect(self):
@@ -48,23 +64,18 @@ class S2CRModemNode(Node):
         port = self.get_parameter('port').value
         try:
             self._sock = socket.create_connection((host, port), timeout=5)
-            self._sock.settimeout(None)          # blocking reads in the thread
+            self._sock.settimeout(None)
             self.get_logger().info(f'S2CR modem: connected to {host}:{port}')
-
-            # Verify with AT command
             self._sock.sendall(b'AT\r\n')
-
             self._running = True
             self._thread = threading.Thread(target=self._recv_loop, daemon=True)
             self._thread.start()
-
         except OSError as exc:
             self.get_logger().warn(f'S2CR modem: cannot connect to {host}:{port} — {exc}')
             self._sock = None
 
     # ------------------------------------------------------------------
     def _recv_loop(self):
-        """Background thread: read lines from the modem socket."""
         buf = b''
         while self._running:
             try:
@@ -82,7 +93,6 @@ class S2CRModemNode(Node):
                 break
 
     def _parse_line(self, line: str):
-        """Handle one line received from the modem."""
         self.get_logger().debug(f'S2CR raw: {line}')
         if line.startswith(RECV_PREFIX):
             # RECV,<len>,<from>,<to>,<proptime>,<relvel>,<rssi>,<integrity>,<payload>
@@ -90,7 +100,14 @@ class S2CRModemNode(Node):
             if len(parts) == 9:
                 payload = parts[8]
                 self.pub_message.publish(String(data=payload))
-                self.get_logger().info(f'S2CR modem: received message — "{payload}"')
+                self.get_logger().info(f'S2CR modem: received — "{payload}"')
+
+    # ------------------------------------------------------------------
+    def _sim_callback(self):
+        payload = _SIM_MESSAGES[self._sim_idx % len(_SIM_MESSAGES)]
+        self._sim_idx += 1
+        self.pub_message.publish(String(data=payload))
+        self.get_logger().info(f'S2CR modem [SIM]: received — "{payload}"')
 
     # ------------------------------------------------------------------
     def destroy_node(self):

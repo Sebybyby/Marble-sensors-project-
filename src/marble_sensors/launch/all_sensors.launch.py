@@ -1,9 +1,12 @@
 """
 Launch all MARBLE sensor nodes.
 
-Override serial ports and network addresses with ROS 2 launch arguments:
+Quick start in simulation (no hardware required):
+  ros2 launch marble_sensors all_sensors.launch.py simulate:=true
 
+With real hardware, override ports/hosts as needed:
   ros2 launch marble_sensors all_sensors.launch.py \
+      simulate:=false \
       sbe37_port:=/dev/ttyUSB0 \
       aquadopp_port:=/dev/ttyUSB1 \
       weather_port:=/dev/ttyUSB2 \
@@ -21,10 +24,8 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
 
-    # ----------------------------------------------------------------
-    # Launch arguments (allows overriding from the command line)
-    # ----------------------------------------------------------------
     args = [
+        DeclareLaunchArgument('simulate',      default_value='false',          description='Enable simulation mode for all nodes (no hardware needed)'),
         DeclareLaunchArgument('sbe37_port',    default_value='/dev/ttyUSB0',   description='SBE37 serial port'),
         DeclareLaunchArgument('aquadopp_port', default_value='/dev/ttyUSB1',   description='Aquadopp serial port'),
         DeclareLaunchArgument('weather_port',  default_value='/dev/ttyUSB2',   description='Weather station serial port'),
@@ -34,57 +35,42 @@ def generate_launch_description():
         DeclareLaunchArgument('oculus_host',   default_value='192.168.2.4',    description='Oculus sonar IP address'),
     ]
 
-    # ----------------------------------------------------------------
-    # Nodes
-    # ----------------------------------------------------------------
+    sim = LaunchConfiguration('simulate')
+
     nodes = [
         Node(
-            package='marble_sensors',
-            executable='sbe37_sip',
-            name='sbe37_sip',
-            parameters=[{'port': LaunchConfiguration('sbe37_port')}],
+            package='marble_sensors', executable='sbe37_sip', name='sbe37_sip',
+            parameters=[{'port': LaunchConfiguration('sbe37_port'), 'simulate': sim}],
             output='screen',
         ),
         Node(
-            package='marble_sensors',
-            executable='aquadopp_profiler',
-            name='aquadopp_profiler',
-            parameters=[{'port': LaunchConfiguration('aquadopp_port')}],
+            package='marble_sensors', executable='aquadopp_profiler', name='aquadopp_profiler',
+            parameters=[{'port': LaunchConfiguration('aquadopp_port'), 'simulate': sim}],
             output='screen',
         ),
         Node(
-            package='marble_sensors',
-            executable='s2cr_modem',
-            name='s2cr_modem',
-            parameters=[{'host': LaunchConfiguration('s2cr_host')}],
+            package='marble_sensors', executable='s2cr_modem', name='s2cr_modem',
+            parameters=[{'host': LaunchConfiguration('s2cr_host'), 'simulate': sim}],
             output='screen',
         ),
         Node(
-            package='marble_sensors',
-            executable='weather_station',
-            name='weather_station',
-            parameters=[{'port': LaunchConfiguration('weather_port')}],
+            package='marble_sensors', executable='weather_station', name='weather_station',
+            parameters=[{'port': LaunchConfiguration('weather_port'), 'simulate': sim}],
             output='screen',
         ),
         Node(
-            package='marble_sensors',
-            executable='motus_wave',
-            name='motus_wave',
-            parameters=[{'port': LaunchConfiguration('motus_port')}],
+            package='marble_sensors', executable='motus_wave', name='motus_wave',
+            parameters=[{'port': LaunchConfiguration('motus_port'), 'simulate': sim}],
             output='screen',
         ),
         Node(
-            package='marble_sensors',
-            executable='oculus_sonar',
-            name='oculus_sonar',
-            parameters=[{'host': LaunchConfiguration('oculus_host')}],
+            package='marble_sensors', executable='oculus_sonar', name='oculus_sonar',
+            parameters=[{'host': LaunchConfiguration('oculus_host'), 'simulate': sim}],
             output='screen',
         ),
         Node(
-            package='marble_sensors',
-            executable='rbrcoda3',
-            name='rbrcoda3',
-            parameters=[{'port': LaunchConfiguration('rbr_port')}],
+            package='marble_sensors', executable='rbrcoda3', name='rbrcoda3',
+            parameters=[{'port': LaunchConfiguration('rbr_port'), 'simulate': sim}],
             output='screen',
         ),
     ]
